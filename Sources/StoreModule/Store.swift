@@ -124,6 +124,28 @@ public class Store {
         return true
     }
     
+    public func isInTrial(_ productIdentifier: String) async throws -> Bool {
+        //Get the most recent transaction receipt for this `productIdentifier`.
+        guard let result = await Transaction.latest(for: productIdentifier) else {
+            //If there is no latest transaction, the product has not been purchased.
+            return false
+        }
+
+        let transaction = try checkVerified(result)
+
+        //Ignore revoked transactions, they're no longer purchased.
+
+        //For subscriptions, a user can upgrade in the middle of their subscription period. The lower service
+        //tier will then have the `isUpgraded` flag set and there will be a new transaction for the higher service
+        //tier. Ignore the lower service tier transactions which have been upgraded.
+        
+        guard transaction.revocationDate == nil && !transaction.isUpgraded else {
+            return false
+        }
+                
+        return transaction.offerType == .introductory
+    }
+    
     public func restorePurchases() async throws {
         for await result in Transaction.currentEntitlements {
             do {
@@ -140,7 +162,7 @@ public class Store {
             }
         }
     }
-    
+        
 }
 
 extension Store {
