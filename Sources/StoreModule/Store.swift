@@ -67,11 +67,11 @@ public class Store {
     }
     
     @discardableResult
-    public func purchase(productIdentifier: String) async throws -> Transaction? {
+    public func purchase(productIdentifier: String) async throws -> Transaction {
         let product = availableProducts.first { $0.id == productIdentifier }
         
         guard let product = product else {
-            return nil
+            throw StoreError.purchaseFailed(error: .productUnavailable)
         }
         
         return try await purchase(product)
@@ -219,4 +219,5 @@ extension Store {
 public enum StoreError: Error {
     case failedVerification
     case purchaseFailed(result: Product.PurchaseResult)
+    case purchaseFailed(error: Product.PurchaseError)
 }
