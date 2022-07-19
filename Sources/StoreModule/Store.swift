@@ -31,8 +31,8 @@ public class Store {
     private var updateListenerTask: Task<Void, Error>? = nil
 
     private let purchasesMonitor: PurchasesMonitor
-    
-    private(set) var currentSubscription: Product?
+        
+    private(set) public var currentSubscription: Product? 
         
     public var purchasesStream: AsyncStream<String> {
         AsyncStream { continuation in
