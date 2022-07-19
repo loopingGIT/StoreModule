@@ -32,6 +32,8 @@ public class Store {
 
     private let purchasesMonitor: PurchasesMonitor
     
+    private(set) var currentSubscription: Product?
+        
     public var purchasesStream: AsyncStream<String> {
         AsyncStream { continuation in
             purchasesMonitor.purchaseHandler = { quake in
@@ -57,6 +59,8 @@ public class Store {
             //Request products from the App Store using the identifiers defined in the Products.plist file.
             let products =  try await StoreKit.Product.products(for: identifiers)
             availableProducts = availableProducts.union(products)
+            
+            await updateSubscriptionStatus()
             
             return products
         } catch {
@@ -86,6 +90,10 @@ public class Store {
         case .success(let verification):
             let transaction = try checkVerified(verification)
 
+            if product.type == .autoRenewable {
+                currentSubscription = product
+            }
+            
             //Deliver content to the user.
             await updatePurchasedIdentifiers(transaction)
 
@@ -161,6 +169,8 @@ public class Store {
                 print("Transaction failed verification")
             }
         }
+        
+        await updateSubscriptionStatus()
     }
         
 }
@@ -211,6 +221,39 @@ extension Store {
                     print("Transaction failed verification")
                 }
             }
+        }
+    }
+    
+    @MainActor
+    func updateSubscriptionStatus() async {
+        do {
+            //This app has only one subscription group so products in the subscriptions
+            //array all belong to the same group. The statuses returned by
+            //`product.subscription.status` apply to the entire subscription group.
+            guard let product = availableProducts.first,
+                  let statuses = try await product.subscription?.status else {
+                return
+            }
+            
+            //Iterate through `statuses` for this subscription group and find
+            //the `Status` with the highest level of service which isn't
+            //expired or revoked.
+            for status in statuses {
+                switch status.state {
+                case .expired, .revoked:
+                    continue
+                default:
+                    let renewalInfo = try checkVerified(status.renewalInfo)
+
+                    guard let newSubscription = availableProducts.first(where: { $0.id == renewalInfo.currentProductID }) else {
+                        continue
+                    }
+
+                    currentSubscription = newSubscription
+                }
+            }
+        } catch {
+            print("Could not update subscription status \(error)")
         }
     }
 
