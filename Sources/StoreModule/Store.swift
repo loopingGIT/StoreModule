@@ -59,9 +59,7 @@ public class Store {
             //Request products from the App Store using the identifiers defined in the Products.plist file.
             let products =  try await StoreKit.Product.products(for: identifiers)
             availableProducts = availableProducts.union(products)
-            
-            await updateSubscriptionStatus()
-            
+                        
             return products
         } catch {
             print("Failed product request: \(error)")
@@ -169,8 +167,6 @@ public class Store {
                 print("Transaction failed verification")
             }
         }
-        
-        await updateSubscriptionStatus()
     }
         
 }
@@ -224,39 +220,30 @@ extension Store {
         }
     }
     
-    @MainActor
-    func updateSubscriptionStatus() async {
-        do {
-            //This app has only one subscription group so products in the subscriptions
-            //array all belong to the same group. The statuses returned by
-            //`product.subscription.status` apply to the entire subscription group.
-            guard let product = availableProducts.first,
-                  let statuses = try await product.subscription?.status else {
-                return
+    func currentSubscriptionTransaction() async -> Transaction? {
+        var transaction: Transaction?
+        
+        for product in availableProducts {
+            guard let result = await Transaction.latest(for: product.id) else {
+                continue
             }
             
-            //Iterate through `statuses` for this subscription group and find
-            //the `Status` with the highest level of service which isn't
-            //expired or revoked.
-            for status in statuses {
-                switch status.state {
-                case .expired, .revoked:
-                    continue
-                default:
-                    let renewalInfo = try checkVerified(status.renewalInfo)
-
-                    guard let newSubscription = availableProducts.first(where: { $0.id == renewalInfo.currentProductID }) else {
-                        continue
-                    }
-
-                    currentSubscription = newSubscription
-                }
+            guard let productTransaction = try? self.checkVerified(result) else {
+                continue
             }
-        } catch {
-            print("Could not update subscription status \(error)")
+            
+            guard productTransaction.revocationDate == nil && !productTransaction.isUpgraded else {
+                continue
+            }
+            
+            transaction = productTransaction
+            
+            break
         }
+        
+        return transaction
     }
-
+    
 }
 
 public enum StoreError: Error {
