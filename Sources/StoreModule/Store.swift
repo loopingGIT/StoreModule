@@ -168,10 +168,34 @@ public class Store {
             }
         }
     }
+       
+    public func currentSubscriptionTransaction() async -> Transaction? {
+        var transaction: Transaction?
         
+        for product in availableProducts {
+            guard let result = await Transaction.latest(for: product.id) else {
+                continue
+            }
+            
+            guard let productTransaction = try? self.checkVerified(result) else {
+                continue
+            }
+            
+            guard productTransaction.revocationDate == nil && !productTransaction.isUpgraded else {
+                continue
+            }
+            
+            transaction = productTransaction
+            
+            break
+        }
+        
+        return transaction
+    }
+    
 }
 
-extension Store {
+private extension Store {
     
     func checkVerified<T>(_ result: VerificationResult<T>) throws -> T {
         //Check if the transaction passes StoreKit verification.
@@ -219,31 +243,7 @@ extension Store {
             }
         }
     }
-    
-    func currentSubscriptionTransaction() async -> Transaction? {
-        var transaction: Transaction?
-        
-        for product in availableProducts {
-            guard let result = await Transaction.latest(for: product.id) else {
-                continue
-            }
-            
-            guard let productTransaction = try? self.checkVerified(result) else {
-                continue
-            }
-            
-            guard productTransaction.revocationDate == nil && !productTransaction.isUpgraded else {
-                continue
-            }
-            
-            transaction = productTransaction
-            
-            break
-        }
-        
-        return transaction
-    }
-    
+
 }
 
 public enum StoreError: Error {
